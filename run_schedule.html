@@ -2451,7 +2451,10 @@ var WIX_TOKEN='soccer2026admin';
 function _compressData(str){
   var stream=new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'));
   return new Response(stream).arrayBuffer().then(function(buf){
-    return btoa(String.fromCharCode.apply(null,new Uint8Array(buf)));
+    var bytes=new Uint8Array(buf);
+    var binary='';
+    for(var i=0;i<bytes.byteLength;i++){binary+=String.fromCharCode(bytes[i]);}
+    return btoa(binary);
   });
 }
 function _decompressData(b64){
