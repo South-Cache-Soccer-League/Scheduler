@@ -2448,6 +2448,18 @@ var wixMode=false;
 var WIX_API='https://www.southcachesoccer.com/_functions/schedules';
 var WIX_TOKEN='soccer2026admin';
 
+function _compressData(str){
+  var stream=new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Response(stream).arrayBuffer().then(function(buf){
+    return btoa(String.fromCharCode.apply(null,new Uint8Array(buf)));
+  });
+}
+function _decompressData(b64){
+  var bytes=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});
+  var stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).text();
+}
+
 function initWixBridge(){
   fetch(WIX_API)
     .then(function(r){return r.json();})
@@ -2496,7 +2508,11 @@ function wixLoadSeason(id){
   var el=document.getElementById('wix-startup');if(el)el.remove();
   fetch(WIX_API+'/'+id)
     .then(function(r){return r.json();})
-    .then(function(d){_applyWixLoad(d.data,d.title);})
+    .then(function(d){
+      return _decompressData(d.data).then(function(jsonStr){
+        _applyWixLoad(jsonStr,d.title);
+      });
+    })
     .catch(function(e){alert('Failed to load season: '+e.message);});
 }
 
@@ -2522,15 +2538,17 @@ function wixSaveToCloud(){
   var defaultName='Fall '+d.getFullYear();
   var title=prompt('Season name:',defaultName);
   if(!title)return;
-  var data=JSON.stringify(DB,function(key,val){return val instanceof Date?val.toISOString():val;});
-  fetch(WIX_API,{
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-Auth-Token':WIX_TOKEN},
-    body:JSON.stringify({title:title.trim(),data:data})
-  })
-  .then(function(r){return r.json();})
-  .then(function(d){_showToast('\u2601 Saved: '+d.title,'#1a5276');})
-  .catch(function(e){_showToast('\u26a0 Save failed: '+e.message,'#c0392b');});
+  var jsonStr=JSON.stringify(DB,function(key,val){return val instanceof Date?val.toISOString():val;});
+  _compressData(jsonStr).then(function(compressed){
+    return fetch(WIX_API,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Auth-Token':WIX_TOKEN},
+      body:JSON.stringify({title:title.trim(),data:compressed})
+    });
+  }).then(function(r){
+    if(r.ok){_showToast('\u2601 Saved: '+title.trim(),'#1a5276');}
+    else{_showToast('\u26a0 Save failed','#c0392b');}
+  }).catch(function(e){_showToast('\u26a0 Save failed: '+e.message,'#c0392b');});
 }
 
 function _showToast(msg,bg){
